@@ -1,0 +1,14 @@
+# UpScrolled Video Downloader - robots.txt
+# https://upscrolleddownload.com/robots.txt
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://upscrolleddownload.com/sitemap.xml
+
+# Crawl delay (optional, be nice to crawlers)
+Crawl-delay: 1
+
+# Block API endpoints from indexing
+Disallow: /api/

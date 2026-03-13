@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    
+    <!-- Primary Meta Tags -->
+    <title>UpScrolled Video Downloader - Download UpScrolled Videos Free | No Watermark</title>
+    <meta name="title" content="UpScrolled Video Downloader - Download UpScrolled Videos Free | No Watermark">
+    <meta name="description" content="Download UpScrolled videos free online. Paste any UpScrolled share link and save videos to MP4. No login, no app, no watermark. Fast and easy video saver.">
+    <meta name="keywords" content="upscrolled video download, download upscrolled videos, upscrolled downloader, save upscrolled video, upscrolled video saver, upscrolled mp4 download, download upscrolled without watermark, upscrolled share link download, free upscrolled downloader">
+    <meta name="robots" content="index, follow">
+    <meta name="author" content="UpScrolled Video Downloader">
+    <link rel="canonical" href="https://upscrolleddownload.com/">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://upscrolleddownload.com/">
+    <meta property="og:title" content="UpScrolled Video Downloader - Download UpScrolled Videos Free">
+    <meta property="og:description" content="Download UpScrolled videos free online. Paste any share link and save videos to MP4. No login, no watermark.">
+    <meta property="og:image" content="https://upscrolleddownload.com/og-image.png">
+    <meta property="og:site_name" content="UpScrolled Video Downloader">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://upscrolleddownload.com/">
+    <meta property="twitter:title" content="UpScrolled Video Downloader - Download UpScrolled Videos Free">
+    <meta property="twitter:description" content="Download UpScrolled videos free online. Paste any share link and save videos to MP4. No login, no watermark.">
+    <meta property="twitter:image" content="https://upscrolleddownload.com/og-image.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Schema.org Markup -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "UpScrolled Video Downloader",
+        "description": "Download UpScrolled videos free online. Paste any share link and save videos to MP4 without watermark.",
+        "url": "https://upscrolleddownload.com",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "featureList": [
+            "Download UpScrolled videos",
+            "No watermark",
+            "No login required",
+            "Free to use",
+            "MP4 format"
+        ]
+    }
+    </script>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar"></nav>
+
+    <!-- Main Content -->
+    <main>
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="container">
+                <h1>Download UpScrolled Videos Free</h1>
+                <p class="hero-subtitle">Paste any UpScrolled share link and download the video instantly to your device. No login, no app, no watermark.</p>
+                
+                <!-- Download Form -->
+                <div class="download-form">
+                    <form id="downloadForm" class="input-group">
+                        <input 
+                            type="url" 
+                            id="videoUrl" 
+                            class="input-field" 
+                            placeholder="Paste your UpScrolled link here..."
+                            autocomplete="off"
+                            required
+                            aria-label="UpScrolled video URL"
+                        >
+                        <button type="submit" id="downloadBtn" class="btn btn-primary btn-block" disabled>
+                            Download Video
+                        </button>
+                    </form>
+                    
+                    <!-- Progress Bar -->
+                    <div class="progress-container" id="progressContainer">
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill"></div>
+                        </div>
+                        <p class="progress-text">Processing your video...</p>
+                    </div>
+                    
+                    <!-- Success Message -->
+                    <div class="status-message success" id="successMessage">
+                        <p><strong>Your video is ready!</strong></p>
+                        <button type="button" id="downloadMp4Btn" class="btn btn-primary">Download MP4</button>
+                        <button type="button" id="resetBtn" class="btn btn-outline mt-2">Download Another Video</button>
+                    </div>
+                    
+                    <!-- Error Message -->
+                    <div class="status-message error" id="errorMessage">
+                        <p id="errorText">Invalid link. Please check and try again.</p>
+                        <button type="button" id="tryAgainBtn" class="btn btn-outline">Try Again</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section class="how-it-works" id="how-it-works">
+            <div class="container">
+                <h2 class="section-title">How to Download UpScrolled Videos</h2>
+                <div class="steps-grid">
+                    <div class="step-card">
+                        <div class="step-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </div>
+                        <div class="step-number">1</div>
+                        <h3>Copy Link</h3>
+                        <p>Open UpScrolled app, find the video, tap Share and copy the link</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M12 11v6"/><path d="m9 14 3 3 3-3"/></svg>
+                        </div>
+                        <div class="step-number">2</div>
+                        <h3>Paste Link</h3>
+                        <p>Paste the UpScrolled share link in the input box above</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <div class="step-number">3</div>
+                        <h3>Download</h3>
+                        <p>Click Download and save the MP4 video to your device</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Trust Section -->
+        <section class="trust-section">
+            <div class="container">
+                <div class="trust-badges">
+                    <span class="trust-badge">Free Forever</span>
+                    <span class="trust-badge">No Login Required</span>
+                    <span class="trust-badge">No Watermark</span>
+                    <span class="trust-badge">No App Needed</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ Section -->
+        <section class="faq-section" id="faq">
+            <div class="container">
+                <h2 class="section-title">Frequently Asked Questions</h2>
+                <div class="faq-list">
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span>How do I download videos from UpScrolled?</span>
+                            <span class="faq-icon">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Simply copy the share link from the UpScrolled app, paste it in the input box above, and click Download. Your video will be converted to MP4 and ready to save in seconds.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span>Is this UpScrolled downloader free to use?</span>
+                            <span class="faq-icon">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Yes, our UpScrolled video downloader is completely free. No hidden fees, no subscriptions, no limits on downloads.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span>Will the downloaded video have a watermark?</span>
+                            <span class="faq-icon">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>No, videos downloaded using our tool come without any additional watermarks. You get the original video quality as uploaded by the creator.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span>Can I download UpScrolled videos on iPhone or Android?</span>
+                            <span class="faq-icon">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Yes! Our website works on all devices including iPhone, Android, iPad, and desktop computers. Just open this page in your browser, paste the link, and download.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span>What format are the downloaded videos?</span>
+                            <span class="faq-icon">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>All videos are downloaded in MP4 format, which is compatible with virtually all devices and video players.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span>Do you store the videos I download?</span>
+                            <span class="faq-icon">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>No, we do not store any videos. All processing happens in real-time and temporary files are deleted immediately after your download completes. Your privacy is our priority.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer" id="footer"></footer>
+
+    <!-- Scripts -->
+    <script src="nav.js"></script>
+    <script src="app.js"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
+        }
+    </script>
+</body>
+</html>
