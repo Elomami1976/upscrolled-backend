@@ -38,13 +38,14 @@ MUX_PLAYBACK_ID_PATTERN = re.compile(
 )
 
 # NEW: UpScrolled's own video hosting patterns
+# Note: URLs can be URL-encoded (%2F instead of /) in the HTML
 UPSCROLLED_VIDEO_THUMBNAIL_PATTERN = re.compile(
-    r'image\.prod-ext\.video\.upscrolled\.com[/\\%]([a-zA-Z0-9]+)[/\\%]thumbnail\.jpg',
+    r'(?:image\.)?prod-ext\.video\.upscrolled\.com(?:/|%2F)([a-zA-Z0-9]+)(?:/|%2F)thumbnail\.jpg',
     re.IGNORECASE
 )
 
 UPSCROLLED_VIDEO_STREAM_PATTERN = re.compile(
-    r'video\.upscrolled\.com[/\\%]([a-zA-Z0-9]+)\.m3u8',
+    r'video\.upscrolled\.com(?:/|%2F)([a-zA-Z0-9]+)\.m3u8',
     re.IGNORECASE
 )
 
@@ -306,11 +307,11 @@ def extract_playback_id(html: str) -> tuple[str, str]:
     print(f"Failed to find video ID in HTML. First 3000 chars of HTML:")
     print(html[:3000])
     
-    # Try alternative patterns
+    # Try alternative patterns (including URL-encoded versions)
     alt_patterns = [
-        # UpScrolled patterns
-        (r'video\.upscrolled\.com[/\\]([a-zA-Z0-9]+)', 'upscrolled'),
-        (r'image\.prod-ext\.video\.upscrolled\.com[/\\]([a-zA-Z0-9]+)', 'upscrolled'),
+        # UpScrolled patterns (URL-encoded and non-encoded)
+        (r'video\.upscrolled\.com(?:/|%2F)([a-zA-Z0-9]+)', 'upscrolled'),
+        (r'(?:image\.)?prod-ext\.video\.upscrolled\.com(?:/|%2F)([a-zA-Z0-9]+)', 'upscrolled'),
         # Mux patterns (legacy)
         (r'https://stream\.mux\.com/([a-zA-Z0-9]+)', 'mux'),
         (r'"playbackId"[:\s]*"([a-zA-Z0-9]+)"', 'mux'),
