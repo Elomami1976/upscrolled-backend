@@ -151,10 +151,14 @@
         switch (status) {
             case 400:
                 return 'Invalid UpScrolled link. Please check and try again.';
+            case 403:
+                return 'This video is publicly visible, but the upstream video host denied direct access. Please try another post.';
             case 404:
                 return 'Video not found or is private. Please check the link.';
             case 502:
                 return 'Could not reach UpScrolled. Please try again later.';
+            case 504:
+                return 'The video host took too long to respond. Please try again.';
             case 500:
                 return 'Video processing failed. Please try again.';
             default:
