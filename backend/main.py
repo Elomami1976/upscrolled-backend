@@ -351,6 +351,45 @@ def build_stream_url(playback_id: str, source: str = 'upscrolled') -> str:
         return f"https://stream.mux.com/{playback_id}.m3u8"
 
 
+async def verify_stream_access(stream_url: str) -> None:
+    """Pre-flight check to return clearer API errors before invoking ffmpeg."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://share.upscrolled.com/',
+        'Origin': 'https://share.upscrolled.com',
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            response = await client.get(stream_url, headers=headers)
+
+        if response.status_code == 403:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Video access denied by upstream host. This post is public on UpScrolled but the underlying stream is protected by the video provider."
+            )
+        if response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video stream not found. The post may reference an expired or removed stream."
+            )
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Upstream video host returned HTTP {response.status_code}."
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Timed out while contacting the upstream video host."
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not connect to the upstream video host."
+        )
+
+
 async def convert_stream_to_mp4(stream_url: str, output_path: str) -> None:
     """
     Convert an HLS stream to MP4 using ffmpeg
@@ -493,6 +532,7 @@ async def health_check():
             "content": {"video/mp4": {}}
         },
         400: {"model": ErrorResponse, "description": "Invalid URL format"},
+        403: {"model": ErrorResponse, "description": "Upstream stream access denied"},
         404: {"model": ErrorResponse, "description": "Video not found"},
         500: {"model": ErrorResponse, "description": "Processing error"},
         502: {"model": ErrorResponse, "description": "Cannot reach UpScrolled"},
@@ -527,6 +567,10 @@ async def download_video(request: DownloadRequest):
     # Step 3: Build the stream URL
     stream_url = build_stream_url(playback_id, video_source)
     print(f"Step 3: Built stream URL: {stream_url}")
+
+    # Step 3.5: Verify stream is reachable before ffmpeg
+    print("Step 3.5: Verifying upstream stream access...")
+    await verify_stream_access(stream_url)
     
     # Step 4: Create temporary file for the MP4
     temp_dir = tempfile.gettempdir()
