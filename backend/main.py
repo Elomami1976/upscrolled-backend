@@ -32,8 +32,20 @@ UPSCROLLED_URL_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# OLD: Mux video hosting pattern (deprecated)
 MUX_PLAYBACK_ID_PATTERN = re.compile(
     r'https://image\.mux\.com/([a-zA-Z0-9]+)/thumbnail\.jpg'
+)
+
+# NEW: UpScrolled's own video hosting patterns
+UPSCROLLED_VIDEO_THUMBNAIL_PATTERN = re.compile(
+    r'image\.prod-ext\.video\.upscrolled\.com[/\\%]([a-zA-Z0-9]+)[/\\%]thumbnail\.jpg',
+    re.IGNORECASE
+)
+
+UPSCROLLED_VIDEO_STREAM_PATTERN = re.compile(
+    r'video\.upscrolled\.com[/\\%]([a-zA-Z0-9]+)\.m3u8',
+    re.IGNORECASE
 )
 
 ALLOWED_ORIGINS = [
@@ -240,15 +252,15 @@ async def fetch_page_html(url: str) -> str:
         )
 
 
-def extract_playback_id(html: str) -> str:
+def extract_playback_id(html: str) -> tuple[str, str]:
     """
-    Extract the Mux playback ID from the page HTML
+    Extract the video playback ID from the page HTML
     
     Args:
         html: The HTML content of the UpScrolled page
         
     Returns:
-        The Mux playback ID
+        Tuple of (playback_id, source) where source is 'upscrolled' or 'mux'
         
     Raises:
         HTTPException: If the playback ID cannot be extracted
@@ -268,47 +280,74 @@ def extract_playback_id(html: str) -> str:
             detail="This video is private and cannot be downloaded."
         )
     
-    match = MUX_PLAYBACK_ID_PATTERN.search(html)
-    if not match:
-        # Log the HTML for debugging (first 2000 chars to avoid flooding logs)
-        print(f"Failed to find Mux playback ID in HTML. First 2000 chars of HTML:")
-        print(html[:2000])
-        
-        # Try alternative patterns - UpScrolled might have changed their page structure
-        alt_patterns = [
-            r'https://stream\.mux\.com/([a-zA-Z0-9]+)',  # Direct stream URL
-            r'"playbackId"[:\s]*"([a-zA-Z0-9]+)"',  # JSON playbackId field
-            r'mux-player[^>]*playback-id="([a-zA-Z0-9]+)"',  # Mux player element attribute
-            r'data-playback-id="([a-zA-Z0-9]+)"',  # Data attribute
-        ]
-        
-        for pattern in alt_patterns:
-            alt_match = re.search(pattern, html)
-            if alt_match:
-                print(f"Found playback ID using alternative pattern: {pattern}")
-                return alt_match.group(1)
-        
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Video not found or is private. Could not extract video stream."
-        )
+    # Try NEW UpScrolled video patterns first (as of March 2026)
+    # Check for direct m3u8 stream URL
+    upscrolled_stream_match = UPSCROLLED_VIDEO_STREAM_PATTERN.search(html)
+    if upscrolled_stream_match:
+        playback_id = upscrolled_stream_match.group(1)
+        print(f"Found UpScrolled video ID from stream URL: {playback_id}")
+        return (playback_id, 'upscrolled')
     
-    playback_id = match.group(1)
-    print(f"Extracted playback ID: {playback_id}")
-    return playback_id
+    # Check for thumbnail URL pattern
+    upscrolled_thumb_match = UPSCROLLED_VIDEO_THUMBNAIL_PATTERN.search(html)
+    if upscrolled_thumb_match:
+        playback_id = upscrolled_thumb_match.group(1)
+        print(f"Found UpScrolled video ID from thumbnail URL: {playback_id}")
+        return (playback_id, 'upscrolled')
+    
+    # Try OLD Mux patterns (legacy)
+    mux_match = MUX_PLAYBACK_ID_PATTERN.search(html)
+    if mux_match:
+        playback_id = mux_match.group(1)
+        print(f"Found Mux playback ID: {playback_id}")
+        return (playback_id, 'mux')
+    
+    # Log the HTML for debugging (first 3000 chars)
+    print(f"Failed to find video ID in HTML. First 3000 chars of HTML:")
+    print(html[:3000])
+    
+    # Try alternative patterns
+    alt_patterns = [
+        # UpScrolled patterns
+        (r'video\.upscrolled\.com[/\\]([a-zA-Z0-9]+)', 'upscrolled'),
+        (r'image\.prod-ext\.video\.upscrolled\.com[/\\]([a-zA-Z0-9]+)', 'upscrolled'),
+        # Mux patterns (legacy)
+        (r'https://stream\.mux\.com/([a-zA-Z0-9]+)', 'mux'),
+        (r'"playbackId"[:\s]*"([a-zA-Z0-9]+)"', 'mux'),
+        (r'mux-player[^>]*playback-id="([a-zA-Z0-9]+)"', 'mux'),
+        (r'data-playback-id="([a-zA-Z0-9]+)"', 'mux'),
+    ]
+    
+    for pattern, source in alt_patterns:
+        alt_match = re.search(pattern, html)
+        if alt_match:
+            playback_id = alt_match.group(1)
+            print(f"Found video ID using alternative pattern '{pattern}': {playback_id} (source: {source})")
+            return (playback_id, source)
+    
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Video not found or is private. Could not extract video stream."
+    )
 
 
-def build_stream_url(playback_id: str) -> str:
+def build_stream_url(playback_id: str, source: str = 'upscrolled') -> str:
     """
     Build the HLS stream URL from the playback ID
     
     Args:
-        playback_id: The Mux playback ID
+        playback_id: The video playback ID
+        source: Video source ('upscrolled' or 'mux')
         
     Returns:
         The HLS stream URL
     """
-    return f"https://stream.mux.com/{playback_id}.m3u8"
+    if source == 'upscrolled':
+        # New UpScrolled video hosting (as of March 2026)
+        return f"https://stream.prod-ext.video.upscrolled.com/{playback_id}.m3u8"
+    else:
+        # Legacy Mux hosting
+        return f"https://stream.mux.com/{playback_id}.m3u8"
 
 
 async def convert_stream_to_mp4(stream_url: str, output_path: str) -> None:
@@ -449,7 +488,7 @@ async def download_video(request: DownloadRequest):
     This endpoint:
     1. Validates the UpScrolled share link
     2. Fetches the page HTML
-    3. Extracts the Mux playback ID
+    3. Extracts the video playback ID
     4. Converts the HLS stream to MP4 using ffmpeg
     5. Streams the MP4 file to the client
     
@@ -465,10 +504,11 @@ async def download_video(request: DownloadRequest):
     
     # Step 2: Extract the playback ID
     print("Step 2: Extracting playback ID...")
-    playback_id = extract_playback_id(html)
+    playback_id, video_source = extract_playback_id(html)
+    print(f"Extracted playback ID: {playback_id}, source: {video_source}")
     
     # Step 3: Build the stream URL
-    stream_url = build_stream_url(playback_id)
+    stream_url = build_stream_url(playback_id, video_source)
     print(f"Step 3: Built stream URL: {stream_url}")
     
     # Step 4: Create temporary file for the MP4
@@ -532,8 +572,8 @@ async def debug_video(request: DownloadRequest):
         html = await fetch_page_html(request.url)
         print(f"HTML length: {len(html)}")
         
-        playback_id = extract_playback_id(html)
-        stream_url = build_stream_url(playback_id)
+        playback_id, video_source = extract_playback_id(html)
+        stream_url = build_stream_url(playback_id, video_source)
         
         # Test if stream URL is accessible
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -543,6 +583,7 @@ async def debug_video(request: DownloadRequest):
         return JSONResponse({
             "success": True,
             "playback_id": playback_id,
+            "video_source": video_source,
             "stream_url": stream_url,
             "stream_accessible": stream_accessible,
             "ffmpeg_available": FFMPEG_PATH is not None,
