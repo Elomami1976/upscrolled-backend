@@ -376,9 +376,12 @@ async def convert_stream_to_mp4(stream_url: str, output_path: str) -> None:
     print(f"Output path: {output_path}")
     print(f"Using ffmpeg: {FFMPEG_PATH}")
     
+    # Build ffmpeg command with browser-like headers to avoid 403 blocks
     cmd = [
         FFMPEG_PATH,
         '-y',  # Overwrite output file
+        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '-headers', 'Referer: https://share.upscrolled.com/\r\nOrigin: https://share.upscrolled.com\r\n',
         '-i', stream_url,  # Input HLS stream
         '-c', 'copy',  # Copy streams without re-encoding
         '-bsf:a', 'aac_adtstoasc',  # Fix AAC audio for MP4 container
@@ -408,6 +411,19 @@ async def convert_stream_to_mp4(stream_url: str, output_path: str) -> None:
             print(f"ffmpeg failed with return code: {result.returncode}")
             print(f"ffmpeg stderr: {error_msg}")
             print(f"ffmpeg stdout: {stdout_msg}")
+            
+            # Check for specific error types
+            if "403 Forbidden" in error_msg or "access denied" in error_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Video access denied. This video may be protected or the creator has restricted downloads."
+                )
+            elif "404 Not Found" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Video stream not found. The video may have been removed."
+                )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Video processing failed: {error_msg[:200] if len(error_msg) > 200 else error_msg}"
