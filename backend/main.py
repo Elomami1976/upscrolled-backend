@@ -253,6 +253,21 @@ def extract_playback_id(html: str) -> str:
     Raises:
         HTTPException: If the playback ID cannot be extracted
     """
+    # Check for common error pages first
+    if "Profile Not Found" in html or "does not exist or deactivated" in html:
+        print("Page indicates profile/video not found or deactivated")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found. The video may have been deleted or the profile is deactivated."
+        )
+    
+    if "This post is private" in html or "private post" in html.lower():
+        print("Page indicates video is private")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This video is private and cannot be downloaded."
+        )
+    
     match = MUX_PLAYBACK_ID_PATTERN.search(html)
     if not match:
         # Log the HTML for debugging (first 2000 chars to avoid flooding logs)
