@@ -375,6 +375,67 @@ async def verify_stream_access(stream_url: str) -> None:
         )
 
 
+async def convert_stream_to_mp3(stream_url: str, output_path: str) -> None:
+    """
+    Extract audio from an HLS stream and save as MP3 using ffmpeg
+
+    Args:
+        stream_url: The HLS stream URL
+        output_path: The output file path (.mp3)
+
+    Raises:
+        HTTPException: If ffmpeg fails
+    """
+    import subprocess
+
+    if not FFMPEG_PATH:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Video processor (ffmpeg) not installed."
+        )
+
+    print(f"Extracting audio from stream: {stream_url}")
+
+    cmd = [
+        FFMPEG_PATH,
+        '-y',
+        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '-headers', 'Referer: https://share.upscrolled.com/\r\nOrigin: https://share.upscrolled.com\r\n',
+        '-i', stream_url,
+        '-vn',           # Drop video
+        '-acodec', 'libmp3lame',
+        '-q:a', '2',     # VBR ~190 kbps
+        output_path
+    ]
+
+    print(f"Running ffmpeg mp3 command: {' '.join(cmd)}")
+
+    try:
+        loop = asyncio.get_event_loop()
+
+        def run_ffmpeg():
+            return subprocess.run(cmd, capture_output=True, timeout=FFMPEG_TIMEOUT)
+
+        result = await loop.run_in_executor(None, run_ffmpeg)
+
+        if result.returncode != 0:
+            error_msg = result.stderr.decode() if result.stderr else "Unknown error"
+            print(f"ffmpeg mp3 failed: {error_msg}")
+            if "403 Forbidden" in error_msg or "access denied" in error_msg.lower():
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Audio access denied.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Audio extraction failed: {error_msg[:200]}"
+            )
+
+        print(f"MP3 ready, size: {os.path.getsize(output_path)} bytes")
+
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Audio extraction timed out.")
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="ffmpeg not available.")
+
+
 async def convert_stream_to_mp4(stream_url: str, output_path: str) -> None:
     """
     Convert an HLS stream to MP4 using ffmpeg
@@ -599,6 +660,62 @@ async def download_video(request: DownloadRequest):
         except OSError:
             pass
         print(f"Unexpected error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)[:100]}"
+        )
+
+
+@app.post(
+    "/api/download-audio",
+    tags=["Download"],
+    responses={
+        200: {"description": "Audio file download", "content": {"audio/mpeg": {}}},
+        400: {"model": ErrorResponse, "description": "Invalid URL format"},
+        403: {"model": ErrorResponse, "description": "Upstream stream access denied"},
+        404: {"model": ErrorResponse, "description": "Video not found"},
+        500: {"model": ErrorResponse, "description": "Processing error"},
+        502: {"model": ErrorResponse, "description": "Cannot reach UpScrolled"},
+    }
+)
+async def download_audio(request: DownloadRequest):
+    """
+    Extract audio as MP3 from an UpScrolled share link.
+    """
+    print(f"=== New audio download request ===")
+    print(f"URL: {request.url}")
+
+    html = await fetch_page_html(request.url)
+    playback_id, video_source = extract_playback_id(html)
+    stream_url = build_stream_url(playback_id, video_source)
+    await verify_stream_access(stream_url)
+
+    temp_dir = tempfile.gettempdir()
+    output_filename = f"upscrolled_{uuid.uuid4().hex}.mp3"
+    output_path = os.path.join(temp_dir, output_filename)
+
+    try:
+        await convert_stream_to_mp3(stream_url, output_path)
+        file_size = os.path.getsize(output_path)
+        return StreamingResponse(
+            stream_file(output_path),
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": 'attachment; filename="upscrolled-audio.mp3"',
+                "Content-Length": str(file_size),
+            }
+        )
+    except HTTPException:
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
+        raise
+    except Exception as e:
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)[:100]}"
