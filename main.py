@@ -32,8 +32,21 @@ UPSCROLLED_URL_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# OLD: Mux video hosting pattern (deprecated)
 MUX_PLAYBACK_ID_PATTERN = re.compile(
     r'https://image\.mux\.com/([a-zA-Z0-9]+)/thumbnail\.jpg'
+)
+
+# NEW: UpScrolled's own video hosting patterns
+# Note: URLs can be URL-encoded (%2F instead of /) in the HTML
+UPSCROLLED_VIDEO_THUMBNAIL_PATTERN = re.compile(
+    r'(?:image\.)?prod-ext\.video\.upscrolled\.com(?:/|%2F)([a-zA-Z0-9]+)(?:/|%2F)thumbnail\.jpg',
+    re.IGNORECASE
+)
+
+UPSCROLLED_VIDEO_STREAM_PATTERN = re.compile(
+    r'video\.upscrolled\.com(?:/|%2F)([a-zA-Z0-9]+)\.m3u8',
+    re.IGNORECASE
 )
 
 ALLOWED_ORIGINS = [
@@ -240,39 +253,126 @@ async def fetch_page_html(url: str) -> str:
         )
 
 
-def extract_playback_id(html: str) -> str:
+def extract_playback_id(html: str) -> tuple[str, str]:
     """
-    Extract the Mux playback ID from the page HTML
+    Extract the video playback ID from the page HTML
     
     Args:
         html: The HTML content of the UpScrolled page
         
     Returns:
-        The Mux playback ID
+        Tuple of (playback_id, source) where source is 'upscrolled' or 'mux'
         
     Raises:
         HTTPException: If the playback ID cannot be extracted
     """
-    match = MUX_PLAYBACK_ID_PATTERN.search(html)
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Video not found or is private. Could not extract video stream."
-        )
-    return match.group(1)
+    # Try NEW UpScrolled video patterns first (as of March 2026)
+    # Check for direct m3u8 stream URL
+    upscrolled_stream_match = UPSCROLLED_VIDEO_STREAM_PATTERN.search(html)
+    if upscrolled_stream_match:
+        playback_id = upscrolled_stream_match.group(1)
+        print(f"Found UpScrolled video ID from stream URL: {playback_id}")
+        return (playback_id, 'upscrolled')
+    
+    # Check for thumbnail URL pattern
+    upscrolled_thumb_match = UPSCROLLED_VIDEO_THUMBNAIL_PATTERN.search(html)
+    if upscrolled_thumb_match:
+        playback_id = upscrolled_thumb_match.group(1)
+        print(f"Found UpScrolled video ID from thumbnail URL: {playback_id}")
+        return (playback_id, 'upscrolled')
+    
+    # Try OLD Mux patterns (legacy)
+    mux_match = MUX_PLAYBACK_ID_PATTERN.search(html)
+    if mux_match:
+        playback_id = mux_match.group(1)
+        print(f"Found Mux playback ID: {playback_id}")
+        return (playback_id, 'mux')
+    
+    # Log the HTML for debugging (first 3000 chars)
+    print(f"Failed to find video ID in HTML. First 3000 chars of HTML:")
+    print(html[:3000])
+    
+    # Try alternative patterns (including URL-encoded versions)
+    alt_patterns = [
+        # UpScrolled patterns (URL-encoded and non-encoded)
+        (r'video\.upscrolled\.com(?:/|%2F)([a-zA-Z0-9]+)', 'upscrolled'),
+        (r'(?:image\.)?prod-ext\.video\.upscrolled\.com(?:/|%2F)([a-zA-Z0-9]+)', 'upscrolled'),
+        # Mux patterns (legacy)
+        (r'https://stream\.mux\.com/([a-zA-Z0-9]+)', 'mux'),
+        (r'"playbackId"[:\s]*"([a-zA-Z0-9]+)"', 'mux'),
+        (r'mux-player[^>]*playback-id="([a-zA-Z0-9]+)"', 'mux'),
+        (r'data-playback-id="([a-zA-Z0-9]+)"', 'mux'),
+    ]
+    
+    for pattern, source in alt_patterns:
+        alt_match = re.search(pattern, html)
+        if alt_match:
+            playback_id = alt_match.group(1)
+            print(f"Found video ID using alternative pattern '{pattern}': {playback_id} (source: {source})")
+            return (playback_id, source)
+    
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Video not found or is private. Could not extract video stream."
+    )
 
 
-def build_stream_url(playback_id: str) -> str:
+def build_stream_url(playback_id: str, source: str = 'upscrolled') -> str:
     """
     Build the HLS stream URL from the playback ID
     
     Args:
-        playback_id: The Mux playback ID
+        playback_id: The video playback ID
+        source: Video source ('upscrolled' or 'mux')
         
     Returns:
         The HLS stream URL
     """
-    return f"https://stream.mux.com/{playback_id}.m3u8"
+    if source == 'upscrolled':
+        # New UpScrolled video hosting (as of March 2026)
+        return f"https://stream.prod-ext.video.upscrolled.com/{playback_id}.m3u8"
+    else:
+        # Legacy Mux hosting
+        return f"https://stream.mux.com/{playback_id}.m3u8"
+
+
+async def verify_stream_access(stream_url: str) -> None:
+    """Pre-flight check to return clearer API errors before invoking ffmpeg."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://share.upscrolled.com/',
+        'Origin': 'https://share.upscrolled.com',
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            response = await client.get(stream_url, headers=headers)
+
+        if response.status_code == 403:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Video access denied by upstream host. This post is public on UpScrolled but the underlying stream is protected by the video provider."
+            )
+        if response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video stream not found. The post may reference an expired or removed stream."
+            )
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Upstream video host returned HTTP {response.status_code}."
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Timed out while contacting the upstream video host."
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not connect to the upstream video host."
+        )
 
 
 async def convert_stream_to_mp4(stream_url: str, output_path: str) -> None:
@@ -290,20 +390,30 @@ async def convert_stream_to_mp4(stream_url: str, output_path: str) -> None:
     
     # Check if ffmpeg is available
     if not FFMPEG_PATH:
+        print("ERROR: ffmpeg not found at startup")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Video processor (ffmpeg) not installed. Please install ffmpeg from https://ffmpeg.org/download.html"
         )
     
+    print(f"Processing stream: {stream_url}")
+    print(f"Output path: {output_path}")
+    print(f"Using ffmpeg: {FFMPEG_PATH}")
+    
+    # Build ffmpeg command with browser-like headers to avoid 403 blocks
     cmd = [
         FFMPEG_PATH,
         '-y',  # Overwrite output file
+        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '-headers', 'Referer: https://share.upscrolled.com/\r\nOrigin: https://share.upscrolled.com\r\n',
         '-i', stream_url,  # Input HLS stream
         '-c', 'copy',  # Copy streams without re-encoding
         '-bsf:a', 'aac_adtstoasc',  # Fix AAC audio for MP4 container
         '-movflags', '+faststart',  # Enable fast start for web playback
         output_path
     ]
+    
+    print(f"Running ffmpeg command: {' '.join(cmd)}")
     
     try:
         # Use synchronous subprocess for Windows compatibility
@@ -321,18 +431,40 @@ async def convert_stream_to_mp4(stream_url: str, output_path: str) -> None:
         
         if result.returncode != 0:
             error_msg = result.stderr.decode() if result.stderr else "Unknown error"
-            print(f"ffmpeg error: {error_msg}")
+            stdout_msg = result.stdout.decode() if result.stdout else ""
+            print(f"ffmpeg failed with return code: {result.returncode}")
+            print(f"ffmpeg stderr: {error_msg}")
+            print(f"ffmpeg stdout: {stdout_msg}")
+            
+            # Check for specific error types
+            if "403 Forbidden" in error_msg or "access denied" in error_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Video access denied. This video may be protected or the creator has restricted downloads."
+                )
+            elif "404 Not Found" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Video stream not found. The video may have been removed."
+                )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Video processing failed. Please try again."
+                detail=f"Video processing failed: {error_msg[:200] if len(error_msg) > 200 else error_msg}"
             )
+        
+        print(f"ffmpeg completed successfully, output file exists: {os.path.exists(output_path)}")
+        if os.path.exists(output_path):
+            print(f"Output file size: {os.path.getsize(output_path)} bytes")
             
     except subprocess.TimeoutExpired:
+        print(f"ffmpeg timed out after {FFMPEG_TIMEOUT} seconds")
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Video processing timed out. The video may be too long."
         )
     except FileNotFoundError:
+        print(f"ffmpeg not found at path: {FFMPEG_PATH}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Video processor not available. Please install ffmpeg."
@@ -385,6 +517,7 @@ async def health_check():
             "content": {"video/mp4": {}}
         },
         400: {"model": ErrorResponse, "description": "Invalid URL format"},
+        403: {"model": ErrorResponse, "description": "Upstream stream access denied"},
         404: {"model": ErrorResponse, "description": "Video not found"},
         500: {"model": ErrorResponse, "description": "Processing error"},
         502: {"model": ErrorResponse, "description": "Cannot reach UpScrolled"},
@@ -397,34 +530,50 @@ async def download_video(request: DownloadRequest):
     This endpoint:
     1. Validates the UpScrolled share link
     2. Fetches the page HTML
-    3. Extracts the Mux playback ID
+    3. Extracts the video playback ID
     4. Converts the HLS stream to MP4 using ffmpeg
     5. Streams the MP4 file to the client
     
     All temporary files are deleted after the download completes.
     """
+    print(f"=== New download request ===")
+    print(f"URL: {request.url}")
+    
     # Step 1: Fetch the page HTML
+    print("Step 1: Fetching page HTML...")
     html = await fetch_page_html(request.url)
+    print(f"Fetched HTML successfully, length: {len(html)} chars")
     
     # Step 2: Extract the playback ID
-    playback_id = extract_playback_id(html)
+    print("Step 2: Extracting playback ID...")
+    playback_id, video_source = extract_playback_id(html)
+    print(f"Extracted playback ID: {playback_id}, source: {video_source}")
     
     # Step 3: Build the stream URL
-    stream_url = build_stream_url(playback_id)
+    stream_url = build_stream_url(playback_id, video_source)
+    print(f"Step 3: Built stream URL: {stream_url}")
+
+    # Step 3.5: Verify stream is reachable before ffmpeg
+    print("Step 3.5: Verifying upstream stream access...")
+    await verify_stream_access(stream_url)
     
     # Step 4: Create temporary file for the MP4
     temp_dir = tempfile.gettempdir()
     output_filename = f"upscrolled_{uuid.uuid4().hex}.mp4"
     output_path = os.path.join(temp_dir, output_filename)
+    print(f"Step 4: Output path: {output_path}")
     
     try:
         # Step 5: Convert stream to MP4
+        print("Step 5: Converting stream to MP4...")
         await convert_stream_to_mp4(stream_url, output_path)
         
         # Step 6: Get file size for Content-Length header
         file_size = os.path.getsize(output_path)
+        print(f"Step 6: File ready, size: {file_size} bytes")
         
         # Step 7: Stream the file to the client
+        print("Step 7: Streaming file to client...")
         return StreamingResponse(
             stream_file(output_path),
             media_type="video/mp4",
@@ -436,6 +585,7 @@ async def download_video(request: DownloadRequest):
         
     except HTTPException:
         # Clean up on error
+        print("HTTPException occurred, cleaning up...")
         try:
             os.remove(output_path)
         except OSError:
@@ -443,6 +593,7 @@ async def download_video(request: DownloadRequest):
         raise
     except Exception as e:
         # Clean up on unexpected error
+        print(f"Unexpected error during download: {type(e).__name__}: {e}")
         try:
             os.remove(output_path)
         except OSError:
@@ -450,8 +601,52 @@ async def download_video(request: DownloadRequest):
         print(f"Unexpected error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred. Please try again."
+            detail=f"An unexpected error occurred: {str(e)[:100]}"
         )
+
+
+@app.post("/api/debug", tags=["Debug"])
+async def debug_video(request: DownloadRequest):
+    """
+    Debug endpoint to test video extraction without downloading.
+    Returns the extracted playback ID and stream URL.
+    """
+    try:
+        print(f"=== Debug request ===")
+        print(f"URL: {request.url}")
+        
+        html = await fetch_page_html(request.url)
+        print(f"HTML length: {len(html)}")
+        
+        playback_id, video_source = extract_playback_id(html)
+        stream_url = build_stream_url(playback_id, video_source)
+        
+        # Test if stream URL is accessible
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.head(stream_url)
+            stream_accessible = response.status_code == 200
+        
+        return JSONResponse({
+            "success": True,
+            "playback_id": playback_id,
+            "video_source": video_source,
+            "stream_url": stream_url,
+            "stream_accessible": stream_accessible,
+            "ffmpeg_available": FFMPEG_PATH is not None,
+            "ffmpeg_path": FFMPEG_PATH,
+            "html_length": len(html)
+        })
+    except HTTPException as e:
+        return JSONResponse({
+            "success": False,
+            "error": e.detail,
+            "status_code": e.status_code
+        }, status_code=e.status_code)
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
 
 
 # ============================================================================
