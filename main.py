@@ -27,8 +27,14 @@ from pydantic import BaseModel, HttpUrl, field_validator
 # Configuration
 # ============================================================================
 
+# Accepts both link formats:
+#   https://share.upscrolled.com/en/post/<id>      (legacy share links)
+#   https://upscrolled.com/@<username>/<id>         (current post links)
 UPSCROLLED_URL_PATTERN = re.compile(
-    r'^https://share\.upscrolled\.com/[a-z]{2}/post/([\w-]+)/?$',
+    r'^https://(?:'
+    r'share\.upscrolled\.com/[a-z]{2}/post/([\w-]+)'
+    r'|(?:www\.)?upscrolled\.com/@[\w.-]+/([\w-]+)'
+    r')/?(?:[?#].*)?$',
     re.IGNORECASE
 )
 
